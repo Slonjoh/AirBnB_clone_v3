@@ -4,11 +4,13 @@ Defines the RESTful API actions for Places objects
 """
 
 from api.v1.views import app_views
-from flask import jsonify, abort, request, make_response
+from flask import jsonify, abort, request, make_response, Flask
 from models import storage
 from models.place import Place
 from models.city import City
 from models.user import User
+from models.amenity import Amenity
+from models.state import State
 
 
 @app_views.route('/cities/<city_id>/places',
@@ -82,3 +84,45 @@ def update_place(place_id):
             setattr(place, key, value)
     place.save()
     return make_response(jsonify(place.to_dict()), 200)
+
+
+@app_views.route('/places_search', methods=['POST'])
+def places_search():
+    """Search for places based on the request body JSON"""
+    try:
+        search_params = request.get_json()
+    except Exception as e:
+        return jsonify({"error": "Not a JSON"}), 400
+
+    if not search_params or all(len(v) == 0 for v in search_params.values()):
+        places = storage.all(Place).values()
+    else:
+        states = search_params.get('states', [])
+        cities = search_params.get('cities', [])
+        amenities = search_params.get('amenities', [])
+
+        if states:
+            state_places = [city.places for state_id in states
+                            for state in storage.all(State).values()
+                            if state.id == state_id
+                            for city in state.cities]
+        else:
+            state_places = []
+
+        if cities:
+            city_places = [storage.get(City, city_id).places
+                           for city_id in cities]
+        else:
+            city_places = []
+
+        places = set([place for place_list in state_places + city_places
+                      for place in place_list])
+
+        if amenities:
+            amenity_set = set(amenities)
+            places = [place for place in places
+                      if all(amenity_id in
+                             (amenity.id for amenity in place.amenities)
+                             for amenity_id in amenity_set)]
+
+    return jsonify([place.to_dict() for place in places])
