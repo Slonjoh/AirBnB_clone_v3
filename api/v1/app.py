@@ -18,6 +18,7 @@ app.register_blueprint(app_views, url_prefix='/api/v1')
 def teardown_appcontext(exception):
     storage.close()
 
+
 @app.errorhandler(404)
 def not_found(error):
     """Handler for 404 errors."""
